@@ -202,8 +202,8 @@
   //
   // Returns an object literal with x and y as options.
   function valuesFromMotion(e) {
-    x = e.gamma;
-    y = e.beta;
+    var x = e.gamma;
+    var y = e.beta;
 
     // Swap x and y in Landscape orientation
     if (Math.abs(window.orientation) === 90) {
@@ -251,7 +251,7 @@
         ignoreMoveable = true;
         return;
       }
-      values = valuesFromMotion(e);
+      var values = valuesFromMotion(e);
 
       // Admittedly fuzzy measurements
       x = values.x / motionDegrees;
@@ -269,6 +269,7 @@
         vRatio = y/((moveable() === true) ? motionMax : rect.height),
         layer, i;
 
+    var newX, newY, newZ
     for (i = layers.length; i--;) {
       layer = layers[i];
       if(useTransform && !layer.background){
