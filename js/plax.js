@@ -23,40 +23,26 @@
   WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 */
 
-(function ($) {
+(function (global) {
 
   var maxfps             = 25,
       delay              = 1 / maxfps * 1000,
       lastRender         = new Date().getTime(),
       layers             = [],
-      plaxActivityTarget = {},
       motionDegrees      = 30,
       motionMax          = 1,
       motionMin          = -1,
       motionStartX       = null,
       motionStartY       = null,
-      ignoreMoveable     = false,
-      options            = null;
-
-  var defaults = {
-    useTransform : true
-  };
+      ignoreMoveable     = false
 
   // Public Methods
-  $.fn.plaxify = function (params){
-    options = $.extend({}, defaults, params);
-    options.useTransform = (options.useTransform ? supports3dTransform() : false);
-
-    return this.each(function () {
-
+  global.plaxify = function (el, layer){
+    return (function () {
       var layerExistsAt = -1;
-      var layer         = {
-        "xRange": $(this).data('xrange') || 0,
-        "yRange": $(this).data('yrange') || 0,
-        "zRange": $(this).data('zrange') || 0,
-        "invert": $(this).data('invert') || false,
-        "background": $(this).data('background') || false
-      };
+      layer.xRange = layer.xRange ? parseInt(layer.xRange) : 0;
+      layer.yRange = layer.yRange ? parseInt(layer.yRange) : 0;
+      layer.zRange = layer.zRange ? parseInt(layer.zRange) : 0;
 
       for (var i=0;i<layers.length;i++){
         if (this === layers[i].obj.get(0)){
@@ -64,44 +50,44 @@
         }
       }
 
-      for (var param in params) {
-        if (layer[param] == 0) {
-          layer[param] = params[param];
-        }
-      }
-
       layer.inversionFactor = (layer.invert ? -1 : 1); // inversion factor for calculations
 
       // Add an object to the list of things to parallax
-      layer.obj    = $(this);
-      if(layer.background) {
-        // animate using the element's background
-        pos = (layer.obj.css('background-position') || "0px 0px").split(/ /);
-        if(pos.length != 2) {
-          return;
+      layer.obj = {
+        get: function() { return el },
+        css: function(property) {
+          if (typeof property == 'string') {
+            var camProp = property.replace(/-+(.)?/g, function(match, chr){ return chr ? chr.toUpperCase() : '' })
+            return el.style[camProp] || getComputedStyle(el, '').getPropertyValue(property)
+          } else {
+            var css = ''
+            for (var key in property) {
+              var value = property[key]
+              if (!value && value !== 0) el.style.removeProperty(property)
+              else css += key + ':' + value + ';'
+            }
+            el.style.cssText += ';' + css
+          }
+        },
+        position: function() {
+          var rect = el.getBoundingClientRect()
+          var parent = el.offsetParent ? el.offsetParent.getBoundingClientRect() : {top: 0, left: 0}
+          return {
+            left: rect.left - parent.left + window.pageXOffset,
+            top: rect.top - parent.top + window.pageYOffset,
+          }
         }
-        x = pos[0].match(/^((-?\d+)\s*px|0+\s*%|left)$/);
-        y = pos[1].match(/^((-?\d+)\s*px|0+\s*%|top)$/);
-        if(!x || !y) {
-          // no can-doesville, babydoll, we need pixels or top/left as initial values (it mightbe possible to construct a temporary image from the background-image property and get the dimensions and run some numbers, but that'll almost definitely be slow)
-          return;
-        }
-        layer.originX = layer.startX = x[2] || 0;
-        layer.originY = layer.startY = y[2] || 0;
-        layer.transformOriginX = layer.transformStartX = 0;
-        layer.transformOriginY = layer.transformStartY = 0;
-        layer.transformOriginZ = layer.transformStartZ = 0;
+      }
 
-      } else {
-
+      if(!layer.background) {
         // Figure out where the element is positioned, then reposition it from the top/left, same for transform if using translate3d
         var position           = layer.obj.position(),
             transformTranslate = get3dTranslation(layer.obj);
 
         layer.obj.css({
           'transform' : transformTranslate.join() + 'px',
-          'top'   : position.top,
-          'left'  : position.left,
+          'top'   : position.top + 'px',
+          'left'  : position.left + 'px',
           'right' :'',
           'bottom':''
         });
@@ -124,8 +110,7 @@
       } else {
         layers.push(layer);
       }
-
-    });
+    })();
   };
 
   // Get the translate position of the element
@@ -182,7 +167,7 @@
   // Check support for 3dTransform
   //
   // Returns boolean
-  function supports3dTransform() {
+  var useTransform = (function() {
     var el = document.createElement('p'),
         has3d,
         transforms = {
@@ -204,7 +189,7 @@
 
     document.body.removeChild(el);
     return (has3d !== undefined && has3d.length > 0 && has3d !== "none");
-  }
+  })()
 
   // Determine if the device has an accelerometer
   //
@@ -254,12 +239,12 @@
     if (new Date().getTime() < lastRender + delay) return;
       lastRender = new Date().getTime();
 
-    var leftOffset = (plaxActivityTarget.offset() != null) ? plaxActivityTarget.offset().left : 0,
-        topOffset  = (plaxActivityTarget.offset() != null) ? plaxActivityTarget.offset().top : 0,
+    var leftOffset = 0,
+        topOffset  = 0,
         x          = e.pageX-leftOffset,
         y          = e.pageY-topOffset;
 
-    if (!inViewport(layers[0].obj[0].parentNode)) return;
+    if (!inViewport(layers[0].obj.get(0).parentNode)) return;
 
     if(moveable()){
       if(e.gamma === undefined){
@@ -279,13 +264,14 @@
       y = (y + 1) / 2;
     }
 
-    var hRatio = x/((moveable() === true) ? motionMax : plaxActivityTarget.width()),
-        vRatio = y/((moveable() === true) ? motionMax : plaxActivityTarget.height()),
+    var rect = document.body.getBoundingClientRect()
+    var hRatio = x/((moveable() === true) ? motionMax : rect.width),
+        vRatio = y/((moveable() === true) ? motionMax : rect.height),
         layer, i;
 
     for (i = layers.length; i--;) {
       layer = layers[i];
-      if(options.useTransform && !layer.background){
+      if(useTransform && !layer.background){
         newX = layer.transformStartX + layer.inversionFactor*(layer.xRange*hRatio);
         newY = layer.transformStartY + layer.inversionFactor*(layer.yRange*vRatio);
         newZ = layer.transformStartZ;
@@ -296,88 +282,20 @@
         newY = layer.startY + layer.inversionFactor*(layer.yRange*vRatio);
         if(layer.background) {
           layer.obj
-            .css('background-position', newX+'px '+newY+'px');
+            .css({'background-position': newX+'px '+newY+'px'});
         } else {
           layer.obj
-            .css('left', newX)
-            .css('top', newY);
+            .css({'left': newX, 'top': newY})
         }
       }
     }
   }
 
-  $.plax = {
-    // Begin parallaxing
-    //
-    // Parameters
-    //
-    //  opts - options for plax
-    //    activityTarget - optional; plax will only work within the bounds of this element, if supplied.
-    //
-    //  Examples
-    //
-    //    $.plax.enable({ "activityTarget": $('#myPlaxDiv')})
-    //    # plax only happens when the mouse is over #myPlaxDiv
-    //
-    // returns nothing
-    enable: function(opts){
-      if (opts) {
-        if (opts.activityTarget) plaxActivityTarget = opts.activityTarget || $(document.body);
-        if (typeof opts.gyroRange === 'number' && opts.gyroRange > 0) motionDegrees = opts.gyroRange;
-      } else {
-        plaxActivityTarget = $(document.body);
-      }
-
-      plaxActivityTarget.bind('mousemove.plax', function (e) {
-        plaxifier(e);
-      });
-
-      if(moveable()){
-        window.ondeviceorientation = function(e){plaxifier(e);};
-      }
-
-    },
-
-    // Stop parallaxing
-    //
-    //  Examples
-    //
-    //    $.plax.disable()
-    //    # plax no longer runs
-    //
-    //    $.plax.disable({ "clearLayers": true })
-    //    # plax no longer runs and all layers are forgotten
-    //
-    // returns nothing
-    disable: function(opts){
-      $(document).unbind('mousemove.plax');
-      window.ondeviceorientation = undefined;
-      if (opts && typeof opts.restorePositions === 'boolean' && opts.restorePositions) {
-        for(var i = layers.length; i--;) {
-          layer = layers[i];
-          if(options.useTransform && !layer.background){
-            layer.obj
-                .css('transform', 'translate3d('+layer.transformOriginX+'px,'+layer.transformOriginY+'px,'+layer.transformOriginZ+'px)')
-                .css('top', layer.originY);
-          }else{
-            if(layers[i].background) {
-              layer.obj.css('background-position', layer.originX+'px '+layer.originY+'px');
-            } else {
-              layer.obj
-                .css('left', layer.originX)
-                .css('top', layer.originY);
-            }
-          }
-        }
-      }
-      if (opts && typeof opts.clearLayers === 'boolean' && opts.clearLayers) layers = [];
-    }
-  };
-
-  if (typeof ender !== 'undefined') {
-    $.ender($.fn, true);
+  function handler(e) {
+    plaxifier(e)
   }
 
-})(function () {
-  return typeof jQuery !== 'undefined' ? jQuery : ender;
-}());
+  document.body.addEventListener('mousemove', handler)
+  if (moveable()) window.ondeviceorientation = handler
+
+})(window);
