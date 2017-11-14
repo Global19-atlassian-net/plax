@@ -292,11 +292,7 @@
     }
   }
 
-  function handler(e) {
-    plaxifier(e)
-  }
-
-  document.body.addEventListener('mousemove', handler)
-  if (moveable()) window.ondeviceorientation = handler
+  document.body.addEventListener('mousemove', plaxifier)
+  if (moveable()) window.ondeviceorientation = plaxifier
 
 })(window);
